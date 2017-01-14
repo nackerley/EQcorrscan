@@ -8,7 +8,7 @@
 """
 
 __all__ = ['template_gen', 'match_filter', 'bright_lights', 'lag_calc',
-           'subspace', 'subspace_statistic']
+           'subspace', 'subspace_statistic', 'autocorr']
 
 if __name__ == '__main__':
     import doctest

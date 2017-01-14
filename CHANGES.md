@@ -20,6 +20,7 @@ warnings);
 * Increase test coverage in utils.mag_calc;
 * Add warning message when removing channels from continuous data in
 match_filter;
+* Add autocorrelation template generation routine;
 
 ## 0.1.6
 * Fix bug introduced in version 0.1.5 for match_filter where looping

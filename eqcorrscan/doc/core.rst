@@ -91,3 +91,12 @@ in the clustering_ module.
 .. _Harris: https://e-reports-ext.llnl.gov/pdf/335299.pdf
 .. _clustering: submodules/utils.clustering.html
 
+
+Autocorrelation
+---------------
+autocorr_ contains routines for detecting repeating signals in data with no
+a-priori constraints. This is based on the method described by Brown_.  This
+is an exhaustive search method, and, as alluded to by Brown_, is time-consuming.
+
+.. _autocorr: submodules/core.autocorr.html
+.. _Brown: http://onlinelibrary.wiley.com/doi/10.1029/2008GL034560/full
