@@ -219,7 +219,6 @@ def cluster(template_list, show=True, corr_thresh=0.3, allow_shift=False,
             print('Plotting the dendrogram')
         dendrogram(Z, color_threshold=1 - corr_thresh,
                    distance_sort='ascending')
-        plt.show()
     # Get the indices of the groups
     if debug >= 1:
         print('Clustering')
@@ -880,7 +879,6 @@ def space_cluster(catalog, d_thresh, show=True):
         # Plot the dendrogram...if it's not way too huge
         dendrogram(Z, color_threshold=d_thresh,
                    distance_sort='ascending')
-        plt.show()
 
     # Sort by group id
     indices.sort(key=lambda tup: tup[0])
