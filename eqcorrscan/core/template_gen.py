@@ -735,6 +735,7 @@ def from_seishub(catalog, url, lowcut, highcut, samp_rate, filt_order,
     return temp_list
 
 
+# @profile
 def from_client(catalog, client_id, lowcut, highcut, samp_rate, filt_order,
                 length, prepick, swin, process_len=86400, data_pad=90,
                 all_horiz=False, delayed=True, plot=False, debug=0,
@@ -837,16 +838,17 @@ def from_client(catalog, client_id, lowcut, highcut, samp_rate, filt_order,
                     print(pick)
                     continue
                 all_waveform_info.append(pick.waveform_id)
-        all_waveform_info = list(set([(w.network_code, w.station_code,
-                                      w.channel_code, w.location_code)
-                                     for w in all_waveform_info]))
+        all_waveform_info = list(set([(wf_id.network_code, wf_id.station_code,
+                                      wf_id.location_code, wf_id.channel_code)
+                                     for wf_id in all_waveform_info]))
         all_waveform_info.sort()
         dropped_pick_stations = 0
         for waveform_info in all_waveform_info:
             net = waveform_info[0]
             sta = waveform_info[1]
-            chan = waveform_info[2]
-            loc = waveform_info[3]
+            loc = waveform_info[2]
+            chan = waveform_info[3]
+
             starttime = UTCDateTime(sub_catalog[0].origins[0].time -
                                     data_pad)
             endtime = starttime + process_len
@@ -863,12 +865,15 @@ def from_client(catalog, client_id, lowcut, highcut, samp_rate, filt_order,
                 st += client.get_waveforms(net, sta, loc, chan,
                                            starttime, endtime)
             except FDSNException:
-                warnings.warn('Found no data for this station')
+                print('No data for %s at %s' %
+                      ('.'.join(waveform_info), starttime))
                 dropped_pick_stations += 1
         if debug > 0:
             st.plot()
-        if not st and dropped_pick_stations == len(event.picks):
-            raise FDSNException('No data available, is the server down?')
+        if not st:
+            print('No data available for event, is the server down?')
+            print(event.short_str())
+            continue
         print('Pre-processing data')
         st.merge(fill_value='interpolate')
         # clients download chunks, we need to assert that the data are
@@ -994,6 +999,7 @@ def multi_template_gen(catalog, st, length, swin='all', prepick=0.05,
     return templates
 
 
+# @profile
 def template_gen(picks, st, length, swin='all', prepick=0.05,
                  all_horiz=False, delayed=True, plot=False, min_snr=None,
                  debug=0):
