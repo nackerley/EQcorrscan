@@ -2623,6 +2623,7 @@ class Tribe(object):
         else:
             return party
 
+    # @profile
     def construct(self, method, lowcut, highcut, samp_rate, filt_order,
                   prepick, **kwargs):
         """
