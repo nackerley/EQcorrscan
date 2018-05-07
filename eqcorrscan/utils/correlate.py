@@ -28,6 +28,7 @@ import contextlib
 import copy
 import ctypes
 import os
+import signal
 from multiprocessing import Pool as ProcessPool, cpu_count
 from multiprocessing.pool import ThreadPool
 
@@ -128,9 +129,19 @@ def _pool_boy(Pool, traces, **kwargs):
     n_cores = kwargs.get('cores', cpu_count())
     if n_cores > traces:
         n_cores = traces
+
+    original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     pool = Pool(n_cores)
-    yield pool
-    pool.close()
+
+    signal.signal(signal.SIGINT, original_sigint_handler)
+
+    try:
+        yield pool
+    except KeyboardInterrupt:
+        pool.terminate()
+    else:
+        pool.close()
     pool.join()
 
 
@@ -143,7 +154,8 @@ def _pool_normxcorr(templates, stream, pool, func, *args, **kwargs):
               for sid in seed_ids)
     # get cc results and used chans into their own lists
     results = [pool.apply_async(func, param) for param in params]
-    xcorrs, tr_chans = zip(*(res.get() for res in results))
+    timeout = kwargs.get('timeout', None)
+    xcorrs, tr_chans = zip(*(res.get(timeout=timeout) for res in results))
     cccsums = np.sum(xcorrs, axis=0)
     no_chans = np.sum(np.array(tr_chans).astype(np.int), axis=0)
     for seed_id, tr_chan in zip(seed_ids, tr_chans):
