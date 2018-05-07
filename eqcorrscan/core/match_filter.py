@@ -1693,7 +1693,7 @@ class Template(object):
 
     def detect(self, stream, threshold, threshold_type, trig_int, plotvar,
                pre_processed=False, daylong=False, parallel_process=True,
-               xcorr_func=None, concurrency=None, cores=None,
+               xcorr_func=None, concurrency=None, cores=None, timeout=None,
                ignore_length=False, overlap="calculate", debug=0):
         """
         Detect using a single template within a continuous stream.
@@ -1826,7 +1826,7 @@ class Template(object):
             plotvar=plotvar, pre_processed=pre_processed, daylong=daylong,
             parallel_process=parallel_process, xcorr_func=xcorr_func,
             concurrency=concurrency, cores=cores, ignore_length=ignore_length,
-            overlap=overlap, debug=debug)
+            overlap=overlap, debug=debug, timeout=timeout)
         return party[0]
 
     def construct(self, method, name, lowcut, highcut, samp_rate, filt_order,
@@ -2251,7 +2251,7 @@ class Tribe(object):
     def detect(self, stream, threshold, threshold_type, trig_int, plotvar,
                daylong=False, parallel_process=True, xcorr_func=None,
                concurrency=None, cores=None, ignore_length=False,
-               group_size=None, overlap="calculate", debug=0):
+               group_size=None, overlap="calculate", timeout=None, debug=0):
         """
         Detect using a Tribe of templates within a continuous stream.
 
@@ -2414,7 +2414,8 @@ class Tribe(object):
                 plotvar=plotvar, group_size=group_size, pre_processed=False,
                 daylong=daylong, parallel_process=parallel_process,
                 xcorr_func=xcorr_func, concurrency=concurrency, cores=cores,
-                ignore_length=ignore_length, overlap=overlap, debug=debug)
+                ignore_length=ignore_length, overlap=overlap, debug=debug,
+                timeout=timeout)
             party += group_party
         for family in party:
             if family is not None:
@@ -2597,6 +2598,8 @@ class Tribe(object):
                 st.merge(fill_value='interpolate')
                 st.trim(starttime=starttime + (i * data_length) - pad,
                         endtime=starttime + ((i + 1) * data_length) + pad)
+                if return_stream:
+                    stream += st
                 party += self.detect(
                     stream=st, threshold=threshold,
                     threshold_type=threshold_type, trig_int=trig_int,
@@ -2605,11 +2608,9 @@ class Tribe(object):
                     concurrency=concurrency, cores=cores,
                     ignore_length=ignore_length, group_size=group_size,
                     overlap=None, debug=debug)
-                if return_stream:
-                    stream += st
             except Exception as e:
                 print('Error, routine incomplete, returning incomplete Party')
-                print('Error: %s' % str(e))
+                print('Error: %s' % repr(e))
                 if return_stream:
                     return party, stream
                 else:
@@ -3027,7 +3028,7 @@ def _group_detect(templates, stream, threshold, threshold_type, trig_int,
                   plotvar, group_size=None, pre_processed=False, daylong=False,
                   parallel_process=True, xcorr_func=None, concurrency=None,
                   cores=None, ignore_length=False, overlap="calculate",
-                  debug=0):
+                  debug=0, timeout=None):
     """
     Pre-process and compute detections for a group of templates.
 
@@ -3126,7 +3127,7 @@ def _group_detect(templates, stream, threshold, threshold_type, trig_int,
         st = _group_process(
             template_group=templates, parallel=parallel_process, debug=debug,
             cores=cores, stream=stream, daylong=daylong,
-            ignore_length=ignore_length, overlap=overlap)
+            ignore_length=ignore_length, overlap=overlap, timeout=timeout)
     else:
         warnings.warn('Not performing any processing on the '
                       'continuous data.')
@@ -3163,7 +3164,8 @@ def _group_detect(templates, stream, threshold, threshold_type, trig_int,
                 template_list=[t.st for t in template_group], st=st_chunk,
                 xcorr_func=xcorr_func, concurrency=concurrency,
                 threshold=threshold, threshold_type=threshold_type,
-                trig_int=trig_int, plotvar=plotvar, debug=debug, cores=cores)
+                trig_int=trig_int, plotvar=plotvar, debug=debug, cores=cores,
+                timeout=timeout)
             for template in template_group:
                 family = Family(template=template, detections=[])
                 for detection in detections:
@@ -3174,7 +3176,7 @@ def _group_detect(templates, stream, threshold, threshold_type, trig_int,
 
 
 def _group_process(template_group, parallel, debug, cores, stream, daylong,
-                   ignore_length, overlap):
+                   ignore_length, overlap, timeout=None):
     """
     Process data into chunks based on template processing length.
 
@@ -3209,7 +3211,7 @@ def _group_process(template_group, parallel, debug, cores, stream, daylong,
         'filt_order': master.filt_order,
         'highcut': master.highcut, 'lowcut': master.lowcut,
         'samp_rate': master.samp_rate, 'debug': debug,
-        'parallel': parallel, 'num_cores': cores}
+        'parallel': parallel, 'num_cores': cores, 'timeout': timeout}
     if daylong:
         if not master.process_length == 86400:
             warnings.warn(
@@ -3234,7 +3236,8 @@ def _group_process(template_group, parallel, debug, cores, stream, daylong,
     n_chunks = int((endtime - starttime + 1) / (master.process_length -
                                                 overlap))
     if n_chunks == 0:
-        print('Data must be process_length or longer, not computing')
+        raise MatchFilterError(
+            'Data must be process_length or longer, not computing')
     for i in range(n_chunks):
         kwargs.update(
             {'starttime': starttime + (i * (master.process_length - overlap))})
@@ -3392,7 +3395,7 @@ def _read_family(fname, all_cat):
                              'threshold_type']:
                     det_dict.update({key: value})
                 elif key == 'no_chans':
-                    det_dict.update({key: int(value)})
+                    det_dict.update({key: int(float(value))})
                 elif len(key) == 0:
                     continue
                 else:
@@ -3597,7 +3600,7 @@ def match_filter(template_names, template_list, st, threshold,
                  xcorr_func=None, concurrency=None, cores=None,
                  debug=0, plot_format='png', output_cat=False,
                  output_event=True, extract_detections=False,
-                 arg_check=True):
+                 arg_check=True, timeout=None):
     """
     Main matched-filter detection function.
 
@@ -3906,9 +3909,13 @@ def match_filter(template_names, template_list, st, threshold,
                                               location=stachan[2],
                                               channel=stachan[3]):
                         template.remove(tr)
-                        print('Removing template channel %s.%s.%s.%s due to'
-                              ' no matches in continuous data' %
-                              (stachan[0], stachan[1], stachan[2], stachan[3]))
+
+                        print('Removed %s from templates; '
+                              'channel not in stream %s to %s' %
+                              ('.'.join(stachan),
+                               min([tr.stats.starttime for tr in stream]),
+                               max([tr.stats.endtime for tr in stream])))
+
     template_stachan = _template_stachan
     # Remove un-needed channels from continuous data.
     for tr in stream:
