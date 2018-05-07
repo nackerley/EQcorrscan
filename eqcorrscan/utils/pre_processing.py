@@ -25,6 +25,20 @@ from obspy import Stream, Trace, UTCDateTime
 from obspy.signal.filter import bandpass, lowpass, highpass
 
 
+class PreProcessingError(Exception):
+    """
+    Default error for errors in this module, related to pre-processing.
+    """
+    def __init__(self, value):
+        self.value = value
+
+    def __repr__(self):
+        return self.value
+
+    def __str__(self):
+        return self.value
+
+
 def _check_daylong(tr):
     """
     Check the data quality of the daylong file.
@@ -56,7 +70,7 @@ def _check_daylong(tr):
 
 def shortproc(st, lowcut, highcut, filt_order, samp_rate, debug=0,
               parallel=False, num_cores=False, starttime=None, endtime=None,
-              seisan_chan_names=False):
+              seisan_chan_names=False, timeout=None):
     """
     Basic function to bandpass and downsample.
 
@@ -180,7 +194,7 @@ def shortproc(st, lowcut, highcut, filt_order, samp_rate, debug=0,
             'clip': False, 'seisan_chan_names': seisan_chan_names})
                    for tr in st]
         pool.close()
-        stream_list = [p.get() for p in results]
+        stream_list = [p.get(timeout=timeout) for p in results]
         pool.join()
         st = Stream(stream_list)
     else:
@@ -197,7 +211,7 @@ def shortproc(st, lowcut, highcut, filt_order, samp_rate, debug=0,
 
 def dayproc(st, lowcut, highcut, filt_order, samp_rate, starttime, debug=0,
             parallel=True, num_cores=False, ignore_length=False,
-            seisan_chan_names=False):
+            seisan_chan_names=False, timeout=None):
     """
     Wrapper for dayproc to parallel multiple traces in a stream.
 
@@ -317,11 +331,11 @@ def dayproc(st, lowcut, highcut, filt_order, samp_rate, starttime, debug=0,
         results = [pool.apply_async(process, (tr,), {
             'lowcut': lowcut, 'highcut': highcut, 'filt_order': filt_order,
             'samp_rate': samp_rate, 'debug': debug, 'starttime': starttime,
-            'clip': True, 'ignore_length': ignore_length, 'length': 86400,
+            'clip': False, 'ignore_length': ignore_length, 'length': 86400,
             'seisan_chan_names': seisan_chan_names})
                    for tr in st]
         pool.close()
-        stream_list = [p.get() for p in results]
+        stream_list = [p.get(timeout=timeout) for p in results]
         pool.join()
         st = Stream(stream_list)
     else:
@@ -329,7 +343,7 @@ def dayproc(st, lowcut, highcut, filt_order, samp_rate, starttime, debug=0,
             process(
                 tr=tr, lowcut=lowcut, highcut=highcut, filt_order=filt_order,
                 samp_rate=samp_rate, debug=debug, starttime=starttime,
-                clip=True, length=86400, ignore_length=ignore_length,
+                clip=False, length=86400, ignore_length=ignore_length,
                 seisan_chan_names=seisan_chan_names)
     if tracein:
         st.merge()
@@ -414,6 +428,7 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
 
     # Sanity check to ensure files are daylong
     if float(tr.stats.npts / tr.stats.sampling_rate) != length and clip:
+        old_length = tr.stats.npts
         if debug >= 2:
             print('Data for ' + tr.stats.station + '.' + tr.stats.channel +
                   ' are not of daylong length, will zero pad')
@@ -432,11 +447,11 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
         if len(tr.data) == (length * tr.stats.sampling_rate) + 1:
             tr.data = tr.data[1:len(tr.data)]
         if not tr.stats.sampling_rate * length == tr.stats.npts:
-                raise ValueError('Data are not daylong for ' +
-                                 tr.stats.station + '.' + tr.stats.channel)
+            raise NotImplementedError('Trace incorrect length for %s.%s' %
+                                      (tr.stats.station, tr.stats.channel))
 
-        print('I now have %i data points after enforcing length'
-              % len(tr.data))
+        print('%s: %d samples trimmed to %d'
+              % (tr.id, old_length, len(tr.data)))
     # Check sampling rate and resample
     if tr.stats.sampling_rate != samp_rate:
         if debug >= 2:
@@ -466,9 +481,9 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
         tr.stats.channel = tr.stats.channel[0] + tr.stats.channel[-1]
 
     # Sanity check the time header
-    if tr.stats.starttime.day != day and clip:
-        warnings.warn("Time headers do not match expected date: " +
-                      str(tr.stats.starttime))
+    if tr.stats.starttime.date != day and clip:
+        warnings.warn("Time headers for %s do not match expected date: %s " %
+                      tr.id, str(tr.stats.starttime.date))
 
     # Sanity check to ensure files are daylong
     if float(tr.stats.npts / tr.stats.sampling_rate) != length and clip:
@@ -483,8 +498,8 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
         if len(tr.data) == (length * tr.stats.sampling_rate) + 1:
             tr.data = tr.data[1:len(tr.data)]
         if not tr.stats.sampling_rate * length == tr.stats.npts:
-                raise ValueError('Data are not daylong for ' +
-                                 tr.stats.station + '.' + tr.stats.channel)
+            raise NotImplementedError('Trace incorrect length for %s.%s' %
+                                      (tr.stats.station, tr.stats.channel))
     # Final visual check for debug
     if debug > 4:
         tr.plot()
