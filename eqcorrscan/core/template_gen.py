@@ -838,19 +838,41 @@ def from_client(catalog, client_id, lowcut, highcut, samp_rate, filt_order,
                     print(pick)
                     continue
                 all_waveform_info.append(pick.waveform_id)
-        all_waveform_info = list(set([(wf_id.network_code, wf_id.station_code,
-                                      wf_id.location_code, wf_id.channel_code)
+        all_waveform_info = list(set([(wf_id.network_code or '',
+                                       wf_id.station_code or '',
+                                       wf_id.location_code or '',
+                                       wf_id.channel_code or '')
                                      for wf_id in all_waveform_info]))
+
+        if all_horiz:
+            stations = list(set([items[:2] for items in all_waveform_info]))
+            for station in stations:
+                horizontals = [
+                    items for items in all_waveform_info
+                    if items[:2] == station and items[3][-1] in 'NE12RT']
+                available = [items[3][-1] for items in horizontals]
+                for horizontal in horizontals:
+                    for have, need in zip('EN12RT', 'NE21TR'):
+                        if horizontals[0][3][-1] == have and \
+                                need not in available:
+                            all_waveform_info.append((
+                                horizontals[0][0], horizontals[0][1],
+                                horizontals[0][2],
+                                horizontals[0][3][:-1] + need))
+
         all_waveform_info.sort()
+
         dropped_pick_stations = 0
         for waveform_info in all_waveform_info:
             net = waveform_info[0]
             sta = waveform_info[1]
             loc = waveform_info[2]
             chan = waveform_info[3]
+            pick = next((pick for pick in event.picks
+                         if pick.waveform_id.get_seed_string() ==
+                         '.'.join(waveform_info)), None)
 
-            starttime = UTCDateTime(sub_catalog[0].origins[0].time -
-                                    data_pad)
+            starttime = UTCDateTime(sub_catalog[0].origins[0].time - data_pad)
             endtime = starttime + process_len
             # Check that endtime is after the last event
             if not endtime > sub_catalog[-1].origins[0].time + data_pad:
@@ -858,8 +880,9 @@ def from_client(catalog, client_id, lowcut, highcut, samp_rate, filt_order,
                                        'processing window')
             debug_print('start-time: %s\nend-time: %s\npick-time: %s\n'
                         'pick phase: %s' %
-                        (str(starttime), str(endtime), str(pick.time),
-                         pick.phase_hint), 0, debug)
+                        (str(starttime), str(endtime),
+                         str(pick.time) if pick else 'None',
+                         pick.phase_hint if pick else 'None'), 0, debug)
             debug_print('.'.join([net, sta, loc, chan]), 0, debug)
             try:
                 st += client.get_waveforms(net, sta, loc, chan,
