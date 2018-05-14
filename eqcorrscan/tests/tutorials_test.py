@@ -24,6 +24,12 @@ slow = pytest.mark.skipif(
 )
 
 
+superslow = pytest.mark.skipif(
+    not pytest.config.getoption("--runsuperslow"),
+    reason="need --runsuperslow option to run"
+)
+
+
 class TestTutorialScripts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -103,12 +109,13 @@ class TestTutorialScripts(unittest.TestCase):
                 re_picked_delay = pick.time - (detection.detect_time + delay)
                 self.assertTrue(abs(re_picked_delay) < shift_len)
 
-    @slow
+    @superslow
     @pytest.mark.flaky(reruns=2)
     def test_subspace(self):
         """Test the subspace tutorial."""
         detections = subspace.run_tutorial(plot=False)
         self.assertEqual(len(detections), 11)
+
 
 if __name__ == '__main__':
     """

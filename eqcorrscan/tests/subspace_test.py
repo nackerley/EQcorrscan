@@ -1,5 +1,5 @@
 """
-Functions for testing the utils.stacking functions
+Functions for testing the core.subspace functions
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -141,13 +141,10 @@ class SubspaceTestingMethods(unittest.TestCase):
             identity = np.dot(u.T, u).astype(np.float16)
             self.assertTrue(np.allclose(
                 identity, np.diag(np.ones(len(identity), dtype=np.float16))))
-        comparison_detector = \
-            subspace.read_detector(os.path.
-                                   join(os.path.
-                                        abspath(os.path.
-                                                dirname(__file__)),
-                                        'test_data', 'subspace',
-                                        'master_detector_multi_unaligned.h5'))
+        comparison_detector = subspace.read_detector(
+                os.path.join(os.path.abspath(
+                    os.path.dirname(__file__)), 'test_data', 'subspace',
+                    'master_detector_multi_unaligned.h5'))
         for key in ['name', 'sampling_rate', 'multiplex', 'lowcut', 'highcut',
                     'filt_order', 'dimension', 'stachans']:
             # print(key)
@@ -382,19 +379,20 @@ def get_test_data():
     :return: List of cut templates with no filters applied
     :rtype: list
     """
-    from eqcorrscan.tutorials.get_geonet_events import get_geonet_events
     from obspy import UTCDateTime
     from eqcorrscan.utils.catalog_utils import filter_picks
     from eqcorrscan.utils.clustering import space_cluster
     from obspy.clients.fdsn import Client
 
-    cat = get_geonet_events(minlat=-40.98, maxlat=-40.85, minlon=175.4,
-                            maxlon=175.5, startdate=UTCDateTime(2016, 5, 11),
-                            enddate=UTCDateTime(2016, 5, 13))
+    client = Client("GEONET")
+    cat = client.get_events(
+        minlatitude=-40.98, maxlatitude=-40.85, minlongitude=175.4,
+        maxlongitude=175.5, starttime=UTCDateTime(2016, 5, 11),
+        endtime=UTCDateTime(2016, 5, 13))
     cat = filter_picks(catalog=cat, top_n_picks=5)
-    stachans = list(set([(pick.waveform_id.station_code,
-                          pick.waveform_id.channel_code) for event in cat
-                         for pick in event.picks]))
+    stachans = list(set([
+        (pick.waveform_id.station_code, pick.waveform_id.channel_code)
+        for event in cat for pick in event.picks]))
     clusters = space_cluster(catalog=cat, d_thresh=2, show=False)
     cluster = sorted(clusters, key=lambda c: len(c))[-1]
     client = Client('GEONET')
@@ -402,7 +400,7 @@ def get_test_data():
     bulk_info = []
     for event in cluster:
         t1 = event.origins[0].time + 5
-        t2 = t1 + 15
+        t2 = t1 + 15.1
         for station, channel in stachans:
             bulk_info.append(('NZ', station, '*', channel[0:2] + '?', t1, t2))
     st = client.get_waveforms_bulk(bulk=bulk_info)
@@ -412,12 +410,12 @@ def get_test_data():
         design_set.append(st.copy().trim(t1, t2))
     t1 = UTCDateTime(2016, 5, 11, 19)
     t2 = UTCDateTime(2016, 5, 11, 20)
-    bulk_info = [('NZ', stachan[0], '*',
-                  stachan[1][0:2] + '?',
-                  t1, t2) for stachan in stachans]
+    bulk_info = [('NZ', stachan[0], '*', stachan[1][0:2] + '?', t1, t2)
+                 for stachan in stachans]
     st = client.get_waveforms_bulk(bulk_info)
     st.merge().detrend('simple').trim(starttime=t1, endtime=t2)
     return design_set, st
+
 
 if __name__ == '__main__':
     unittest.main()
