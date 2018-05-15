@@ -858,7 +858,7 @@ def svd_moments(u, s, v, stachans, event_list, n_svs=2):
     :type n_svs: int
     :param n_svs: Number of singular values to use, defaults to 4.
 
-    :returns: M, array of relative moments
+    :returns: M, array of relative moments, kernel matrix
     :rtype: :class:`numpy.ndarray`
     :returns: events_out, list of events that relate to M (in order), \
         does not include the magnitude information in the events, see note.
@@ -1005,11 +1005,7 @@ def svd_moments(u, s, v, stachans, event_list, n_svs=2):
     K_width = len(K[0])
     # Add an extra row to K, so average moment = 1
     K.append(np.ones(K_width) * (1. / K_width))
-    print("Created Kernel matrix: ")
-    del row
-    print('\n'.join([''.join([str(round(float(item), 3)).ljust(6)
-          for item in row]) for row in K]))
-    Krounded = np.around(K, decimals=4)
+
     # Create a weighting matrix to put emphasis on the final row.
     W = np.matrix(np.identity(len(K)))
     # the final element of W = the number of stations*number of events
@@ -1024,7 +1020,7 @@ def svd_moments(u, s, v, stachans, event_list, n_svs=2):
     # M are the relative moments of the events
     M = Kinv[:, -1]
     # XXX TODO This still needs an outlier removal step
-    return M, events_out
+    return M, events_out, K
 
 
 if __name__ == "__main__":
