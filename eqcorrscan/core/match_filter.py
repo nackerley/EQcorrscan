@@ -1908,7 +1908,8 @@ class Template(object):
             plotvar=plotvar, pre_processed=pre_processed, daylong=daylong,
             parallel_process=parallel_process, xcorr_func=xcorr_func,
             concurrency=concurrency, cores=cores, ignore_length=ignore_length,
-            overlap=overlap, debug=debug, full_peaks=full_peaks, timeout=timeout)
+            overlap=overlap, debug=debug, full_peaks=full_peaks,
+            timeout=timeout)
         return party[0]
 
     def construct(self, method, name, lowcut, highcut, samp_rate, filt_order,
@@ -3719,7 +3720,7 @@ def match_filter(template_names, template_list, st, threshold,
                  debug=0, plot_format='png', output_cat=False,
                  output_event=True, extract_detections=False,
                  arg_check=True, full_peaks=False, timeout=None):
->    """
+    """
     Main matched-filter detection function.
 
     Over-arching code to run the correlations of given templates with a
