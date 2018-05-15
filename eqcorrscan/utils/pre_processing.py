@@ -441,6 +441,7 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
     # Sanity check to ensure files are daylong
     padded = False
     if float(tr.stats.npts / tr.stats.sampling_rate) != length and clip:
+        old_length = tr.stats.npts
         debug_print('Data for ' + tr.stats.station + '.' + tr.stats.channel +
                     ' are not of daylong length, will zero pad', 2, debug)
         if tr.stats.endtime - tr.stats.starttime < 0.8 * length\
@@ -474,8 +475,8 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
             raise ValueError('Trace incorrect length for %s.%s' %
                              (tr.stats.station, tr.stats.channel))
 
-        debug_print('%s: %d samples trimmed to %d'
-              % (tr.id, old_length, len(tr.data)), 0, debug)
+        debug_print('%s: %d samples trimmed to %d' %
+                    (tr.id, old_length, len(tr.data)), 0, debug)
     # Check sampling rate and resample
     if tr.stats.sampling_rate != samp_rate:
         debug_print('Resampling', 1, debug)
