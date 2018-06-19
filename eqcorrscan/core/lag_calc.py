@@ -16,17 +16,27 @@ from __future__ import unicode_literals
 import numpy as np
 import scipy
 import warnings
+import getpass
 
 from multiprocessing import Pool, cpu_count
 from collections import Counter
+from pkg_resources import get_distribution
 
-from obspy import Stream
-from obspy.core.event import Catalog
-from obspy.core.event import Event, Pick, WaveformStreamID
-from obspy.core.event import ResourceIdentifier, Comment
+from obspy import Stream, UTCDateTime
+from obspy.core.event import (
+    Catalog, Event, Pick, WaveformStreamID, ResourceIdentifier, Comment,
+    CreationInfo)
 
 from eqcorrscan.utils.plotting import plot_repicked, detection_multiplot
 from eqcorrscan.utils.debug_log import debug_print
+
+
+def _creation_info():
+    package = __name__.split('.')[0]
+    return CreationInfo(
+        author=getpass.getuser(),
+        version=package + ' v' + get_distribution(package).version,
+        creation_time=UTCDateTime())
 
 
 class LagCalcError(Exception):
@@ -155,15 +165,16 @@ def _channel_loop(detection, template, min_cc, detection_id, interpolate, i,
     cccsum = 0
     checksum = 0
     used_chans = 0
+    debug_print('Detection: ' + detection_id, 2, debug)
     for tr in template:
-        temp_net = tr.stats.network
-        temp_sta = tr.stats.station
-        temp_chan = tr.stats.channel
-        debug_print('Working on: %s.%s.%s' % (temp_net, temp_sta, temp_chan),
-                    3, debug)
-        image = detection.select(station=temp_sta, channel=temp_chan)
+        debug_print('Trace: ' + tr.id, 3, debug)
+        image = detection.select(
+            station=tr.stats.station,
+            channel=tr.stats.channel)
         if len(image) == 0:
-            print('No match in image.')
+            debug_print('No match for %s at %s.%s.' %
+                        (detection_id, tr.stats.station, tr.stats.channel), 3,
+                        debug)
             continue
         if interpolate:
             try:
@@ -175,8 +186,9 @@ def _channel_loop(detection, template, min_cc, detection_id, interpolate, i,
                 continue
             try:
                 shift, cc_max = _xcorr_interp(ccc=ccc, dt=image[0].stats.delta)
+                debug_print('Interpolated shift: %g' % shift, 2, debug)
             except IndexError:
-                print('Could not interpolate ccc, not smooth')
+                debug_print('Cannot interpolate ccc, not smooth', 2, debug)
                 ccc = normxcorr2(tr.data, image[0].data)
                 cc_max = np.amax(ccc)
                 shift = np.argmax(ccc) * image[0].stats.delta
@@ -194,43 +206,42 @@ def _channel_loop(detection, template, min_cc, detection_id, interpolate, i,
             cc_max = np.amax(ccc)
             picktime = image[0].stats.starttime + (
                 np.argmax(ccc) * image[0].stats.delta)
-        debug_print('Maximum cross-corr=%s' % cc_max, 3, debug)
+        debug_print('Maximum CCC: %s' % cc_max, 3, debug)
         checksum += cc_max
         used_chans += 1
         if cc_max < min_cc:
-            debug_print('Correlation below threshold, not used', 3, debug)
+            debug_print('CCC < %g, not used' % min_cc, 3, debug)
             continue
         cccsum += cc_max
         # Perhaps weight each pick by the cc val or cc val^2?
         # weight = np.amax(ccc) ** 2
-        if temp_chan[-1] in vertical_chans:
+        if image[0].id[-1] in vertical_chans:
             phase = 'P'
-        # Only take the S-pick with the best correlation
-        elif temp_chan[-1] in horizontal_chans:
+        # Only take the S-pick with the highest CCC
+        elif image[0].id[-1] in horizontal_chans:
             phase = 'S'
-            debug_print('Making S-pick on: %s.%s.%s' %
-                        (temp_net, temp_sta, temp_chan), 4, debug)
-            if temp_sta not in s_stachans.keys():
-                s_stachans[temp_sta] = ((temp_chan, np.amax(ccc),
-                                         picktime))
-            elif temp_sta in s_stachans.keys():
-                if np.amax(ccc) > s_stachans[temp_sta][1]:
+            if tr.stats.station not in s_stachans.keys():
+                s_stachans[tr.stats.station] = (
+                    (tr.stats.channel, np.amax(ccc), picktime))
+            elif tr.stats.station in s_stachans.keys():
+                if np.amax(ccc) > s_stachans[tr.stats.station][1]:
                     picktime = picktime
                 else:
                     continue
         else:
             phase = None
-        _waveform_id = WaveformStreamID(
-            network_code=temp_net, station_code=temp_sta,
-            channel_code=temp_chan)
+        debug_print('Making %s-pick on: %s' % (phase, image[0].id), 2, debug)
         event.picks.append(Pick(
-            waveform_id=_waveform_id, time=picktime,
-            method_id=ResourceIdentifier('EQcorrscan'), phase_hint=phase,
-            creation_info='eqcorrscan.core.lag_calc',
-            comments=[Comment(text='cc_max=%s' % cc_max)]))
-        event.resource_id = detection_id
-    ccc_str = ("detect_val=%s" % cccsum)
-    event.comments.append(Comment(text=ccc_str))
+            time=picktime,
+            phase_hint=phase,
+            waveform_id=WaveformStreamID(seed_string=image[0].id),
+            method_id=ResourceIdentifier(
+                'smi:local/interpolate/%s' % interpolate),
+            creation_info=_creation_info(),
+            comments=[Comment(text='CCC: %g' % cc_max)]))
+
+    event.resource_id = detection_id
+    event.comments.append(Comment(text="Summed CCC: %s" % cccsum))
     if used_chans == detect_chans:
         if pre_lag_ccsum is not None and\
            checksum - pre_lag_ccsum < -(0.30 * pre_lag_ccsum):
@@ -306,7 +317,8 @@ def _day_loop(detection_streams, template, min_cc, detections,
              'i': i, 'pre_lag_ccsum': detections[i].detect_val,
              'detect_chans': detections[i].no_chans,
              'horizontal_chans': horizontal_chans,
-             'vertical_chans': vertical_chans})
+             'vertical_chans': vertical_chans,
+             'debug': debug})
                    for i in range(len(detection_streams))]
         pool.close()
         events_list = [p.get() for p in results]
@@ -376,10 +388,13 @@ def _prepare_data(detect_data, detections, template, delays,
             delay = delays[tr.stats.station + '.' + tr.stats.channel]
             if delay > max_delay:
                 max_delay = delay
-            detect_stream.append(tr.slice(
+            detect_slice = tr.slice(
                 starttime=detection.detect_time - shift_len + delay,
                 endtime=detection.detect_time + delay + shift_len +
-                template_len).copy())
+                template_len).copy()
+
+            if detect_slice:
+                detect_stream.append(detect_slice)
         for tr in detect_stream:
             if len(tr.data) == 0:
                 msg = ('No data in %s.%s for detection at time %s' %
@@ -574,8 +589,8 @@ def lag_calc(detections, detect_data, template_names, templates,
         template_detections = [detection for detection in detections
                                if detection.template_name == template[0]]
         t_delays = [d for d in delays if d[0] == template[0]][0][1]
-        debug_print(
-            'There are %i detections' % len(template_detections), 2, debug)
+        debug_print('There are %i detections' % len(template_detections), 2,
+                    debug)
         detect_streams = _prepare_data(
             detect_data=detect_data, detections=template_detections,
             template=template, delays=t_delays, shift_len=shift_len,
@@ -611,11 +626,11 @@ def lag_calc(detections, detect_data, template_names, templates,
     # Order the catalogue to match the input
     output_cat = Catalog()
     for det in detections:
-        event = [e for e in initial_cat if str(e.resource_id) == str(det.id)]
-        if len(event) == 1:
-            output_cat.append(event[0])
-        elif len(event) == 0:
-            print('No picks made for detection: \n%s' % det.__str__())
+        events = [e for e in initial_cat if str(e.resource_id) == str(det.id)]
+        if len(events) == 1:
+            output_cat.append(events[0])
+        elif len(events) == 0:
+            debug_print('No picks made for detection: ' + det.id, 1, debug)
         else:
             raise NotImplementedError('Multiple events with same id,'
                                       ' should not happen')
