@@ -541,7 +541,7 @@ def _detect(detector, st, threshold, trig_int, moveout=0, min_trig=0,
             detecttime = st[0].stats.starttime + \
                 (peak[1] / detector.sampling_rate)
             rid = ResourceIdentifier(
-                id=detector.name + '_' + str(detecttime), prefix='smi:local')
+                id=detector.name + '_' + str(detecttime))
             ev = Event(resource_id=rid)
             cr_i = CreationInfo(
                 author='EQcorrscan', creation_time=UTCDateTime())
