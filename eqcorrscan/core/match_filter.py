@@ -3366,7 +3366,8 @@ def _group_process(template_group, parallel, debug, cores, stream, daylong,
                                         endtime=kwargs['endtime']).copy()
         else:
             chunk_stream = stream.copy()
-        processed_streams.append(func(st=chunk_stream, **kwargs))
+        if chunk_stream:
+            processed_streams.append(func(st=chunk_stream, **kwargs))
     return processed_streams
 
 
@@ -4173,8 +4174,7 @@ def match_filter(template_names, template_list, st, threshold,
                 else:
                     det_time = str(detecttime.strftime('%Y%m%dT%H%M%S.%f'))
                     ev = Event(resource_id=ResourceIdentifier(
-                        id=_template_names[i] + '_' + det_time,
-                        prefix='smi:local'))
+                        id=_template_names[i] + '_' + det_time))
                     ev.creation_info = CreationInfo(
                         author='EQcorrscan', creation_time=UTCDateTime())
                     ev.comments.append(
