@@ -417,7 +417,7 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
         day = tr.stats.starttime.date
 
     debug_print(
-        'Working on: ' + tr.stats.station + '.' + tr.stats.channel, 2, debug)
+        'Working on: ' + tr.stats.station + '.' + tr.stats.channel, 4, debug)
     if debug >= 5:
         tr.plot()
     # Check if the trace is gappy and pad if it is.
@@ -436,7 +436,7 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
     # Detrend data before filtering
     debug_print('I have ' + str(len(tr.data)) + ' data points for ' +
                 tr.stats.station + '.' + tr.stats.channel +
-                ' before processing', 0, debug)
+                ' before processing', 4, debug)
 
     # Sanity check to ensure files are daylong
     padded = False
@@ -479,20 +479,20 @@ def process(tr, lowcut, highcut, filt_order, samp_rate, debug,
                     (tr.id, old_length, len(tr.data)), 0, debug)
     # Check sampling rate and resample
     if tr.stats.sampling_rate != samp_rate:
-        debug_print('Resampling', 1, debug)
+        debug_print('Resampling', 5, debug)
         tr.resample(samp_rate)
     # Filtering section
     tr = tr.detrend('simple')    # Detrend data again before filtering
     if highcut and lowcut:
-        debug_print('Bandpassing', 1, debug)
+        debug_print('Bandpassing', 5, debug)
         tr.data = bandpass(tr.data, lowcut, highcut,
                            tr.stats.sampling_rate, filt_order, True)
     elif highcut:
-        debug_print('Lowpassing', 1, debug)
+        debug_print('Lowpassing', 5, debug)
         tr.data = lowpass(tr.data, highcut, tr.stats.sampling_rate,
                           filt_order, True)
     elif lowcut:
-        debug_print('Highpassing', 1, debug)
+        debug_print('Highpassing', 5, debug)
         tr.data = highpass(tr.data, lowcut, tr.stats.sampling_rate,
                            filt_order, True)
     else:
